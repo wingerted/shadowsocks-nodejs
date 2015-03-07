@@ -7,8 +7,10 @@ var PORT = "1080";
 var KEY = "Winger";
 var REMOTE_PORT = "1080";
 var STATE_AUTHENTICATION = 1;
+var STATE_CONNECT = 2;
 
 var net = require('net');
+var buffer = require('buffer');
 
 var client = net.createServer(function (host_connection) {
 
@@ -20,6 +22,7 @@ var client = net.createServer(function (host_connection) {
 
         console.log('shadowsocks client get data from user host');
         client.check_state(data);
+        client.handle_data(host_connection, data);
         console.log(data.toString());
     });
 
@@ -28,8 +31,32 @@ var client = net.createServer(function (host_connection) {
 
 client.state = STATE_AUTHENTICATION;
 
+client.handle_data = function(host_connection, data) {
+    switch (client.state) {
+        case STATE_CONNECT:
+            host_connection.write(new Buffer([0x05, 0x00]));
+        case STATE_CONNECT:
+
+    }
+};
+
+
 client.check_state = function(data) {
-    
+    switch (client.state) {
+        case STATE_AUTHENTICATION:
+            if (data[0] == 5) {
+                client.state = STATE_CONNECT;
+            }
+            break;
+        case STATE_CONNECT:
+            if (data[0] == 5 && data[1] == 1 && data[2] == 0) {
+                var connect_address = data.slice(4, 7);
+                var connect_port = data.slice(8, 9);
+
+            }
+            break;
+    }
+
     console.log("Current State is " + this.state);
 };
 
@@ -43,7 +70,6 @@ client.listen(PORT, function (){
 
 var server = net.createConnection(REMOTE_PORT, SERVER, function (server_connection) {
     console.log('shadowsocks server is connected');
-    //server.write('1sdoufhasdflasdj');
 
     server.on("end", function() {console.log('shadowsocks server has disconnected with user host')});
 
