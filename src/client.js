@@ -27,7 +27,7 @@ var client = net.createServer(function (host_connection) {
 
     server_connection.on("data", function(data) {
         check_stage(data);
-        //handle_data(data);
+        handle_data(data);
         console.log('shadowsocks client get data from shadowsocks server')
     });
 
@@ -63,7 +63,7 @@ var client = net.createServer(function (host_connection) {
                 }
                 break;
             case STAGE_CONNECT_TO_SERVER:
-                if (data[0] == 5 && data[1] == 1 && data[2] == 0) {
+                if (data[0] == 5 && data[1] == 0 && data[2] == 0) {
                     stage = STAGE_CONNECT_TO_HOST;
                 }
                 break;
@@ -94,7 +94,7 @@ var client = net.createServer(function (host_connection) {
                 host_connection.write(data);
                 break;
             case STAGE_DATA_TO_SERVER:
-                //server_connection.write(data);
+                server_connection.write(data);
                 break;
             case STAGE_DATA_TO_HOST:
                 host_connection.write(data);
