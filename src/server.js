@@ -33,7 +33,16 @@ var server = net.createServer(function (host_connection) {
         console.log('shadowsocks client get data from user host');
 
         if (stage === STAGE_CONNECT_TO_SERVER) {
-            server_connection = net.connect(REMOTE_PORT, SERVER, function () {
+            // Now we get this
+            // +----+-----+-------+------+----------+----------+
+            // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+            // +----+-----+-------+------+----------+----------+
+            // | 1  |  1  | X'00' |  1   | Variable |    2     |
+            // +----+-----+-------+------+----------+----------+
+
+
+            var remote = parse_header(data);
+            server_connection = net.connect(remote.port, remote.address, function () {
                 console.log('shadowsocks server is connected');
                 handle_data(server_connection, host_connection, data);
             });
@@ -63,6 +72,35 @@ var server = net.createServer(function (host_connection) {
         console.log('connection of shadowsocks client and host error !');
         console.log(e);
     });
+
+    var parse_header = function (socks5_header) {
+        var ADDRESS_TYPE = {
+            IPV4: 1,
+            DOMAIN: 3,
+            IPV6: 4
+        };
+
+        var address, port;
+        var address_type = socks5_header[3];
+
+        if (address_type === ADDRESS_TYPE.DOMAIN) {
+            var address_length = socks5_header[4];
+
+            address = socks5_header.slice(5, 5 + address_length).toString('binary');
+            port = socks5_header.readUInt16BE(5 + address_length);
+        } else if (address_type === ADDRESS_TYPE.IPV4) {
+            var raw_address = socks5_header.slice(4, 8);
+
+            address = raw_address[0] + '.' +
+                      raw_address[1] + '.' +
+                      raw_address[2] + '.' +
+                      raw_address[3];
+
+            port = socks5_header.readUInt16BE(8);
+        }
+
+        return {address:address, port:port};
+    };
 
     var handle_data = function(server_connection, host_connection, data) {
         console.log("Last State is " + stage);
