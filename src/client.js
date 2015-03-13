@@ -19,96 +19,83 @@ var buffer = require('buffer');
 
 var client = net.createServer(function (host_connection) {
 
-    var stage = STAGE_INIT;
-
-    server_connection.on("end", function() {
-        console.log('shadowsocks client has disconnected with shadowsocks server');
-    });
-
-    server_connection.on("data", function(data) {
-        check_stage(data);
-        handle_data(data);
-        console.log('shadowsocks client get data from shadowsocks server')
-    });
-
-    server_connection.on("error", function() {
-        console.log('connection of shadowsocks client and server error !');
-    });
+    var stage = STAGE_AUTHENTICATION;
+    var server_connection = null;
 
     host_connection.on("end", function() {
+        if (server_connection) {
+            server_connection.destroy();
+        }
+
         console.log('shadowsocks client has disconnected with user host');
     });
 
     host_connection.on("data", function(data) {
         console.log('shadowsocks client get data from user host');
-        check_stage(data);
-        handle_data(data);
+
+        if (stage === STAGE_AUTHENTICATION) {
+            server_connection = net.connect(REMOTE_PORT, SERVER, function () {
+                console.log('shadowsocks server is connected');
+
+                handle_data(server_connection, host_connection, data);
+            });
+
+            server_connection.on("end", function() {
+                host_connection.end();
+                console.log('shadowsocks client has disconnected with shadowsocks server');
+            });
+
+            server_connection.on("data", function(data) {
+                handle_data(server_connection, host_connection, data);
+
+                console.log('shadowsocks client get data from shadowsocks server')
+            });
+
+            server_connection.on("error", function(e) {
+                console.log('connection of shadowsocks client and server error !');
+                console.log(e);
+            });
+        } else {
+            handle_data(server_connection, host_connection, data);
+        }
+
         console.log(data.toString());
     });
 
-    host_connection.on("error", function() {
+    host_connection.on("error", function(e) {
         console.log('connection of shadowsocks client and host error !');
+        console.log(e);
     });
 
-    var check_stage = function(data) {
+    var handle_data = function(server_connection, host_connection, data) {
+        console.log("Last State is " + stage);
+
         switch (stage) {
-            case STAGE_INIT:
-                if (data[0] == 5) {
-                    stage = STAGE_AUTHENTICATION;
-                }
-                break;
             case STAGE_AUTHENTICATION:
-                if (data[0] == 5 && data[1] == 1 && data[2] == 0) {
-                    stage = STAGE_CONNECT_TO_SERVER;
-                }
+                host_connection.write(new Buffer([0x05, 0x00]));
+                stage = STAGE_CONNECT_TO_SERVER;
                 break;
             case STAGE_CONNECT_TO_SERVER:
-                if (data[0] == 5 && data[1] == 0 && data[2] == 0) {
-                    stage = STAGE_CONNECT_TO_HOST;
-                }
+                server_connection.write(data);
+                stage = STAGE_CONNECT_TO_HOST;
                 break;
             case STAGE_CONNECT_TO_HOST:
+                host_connection.write(data);
                 stage = STAGE_DATA_TO_SERVER;
                 break;
             case STAGE_DATA_TO_SERVER:
+                server_connection.write(data);
                 stage = STAGE_DATA_TO_HOST;
                 break;
             case STAGE_DATA_TO_HOST:
-                //stage = STAGE_DATA_TO_SERVER;
+                host_connection.write(data);
                 break;
             default : break;
         }
 
         console.log("Current State is " + stage);
     };
-
-    var handle_data = function(data) {
-        switch (stage) {
-            case STAGE_AUTHENTICATION:
-                host_connection.write(new Buffer([0x05, 0x00]));
-                break;
-            case STAGE_CONNECT_TO_SERVER:
-                server_connection.write(data);
-                break;
-            case STAGE_CONNECT_TO_HOST:
-                host_connection.write(data);
-                break;
-            case STAGE_DATA_TO_SERVER:
-                server_connection.write(data);
-                break;
-            case STAGE_DATA_TO_HOST:
-                host_connection.write(data);
-                break;
-            default : break;
-        }
-    };
-
 });
-
-var server_connection = net.connect(REMOTE_PORT, SERVER, function () {
-    console.log('shadowsocks server is connected');
-});
-
 
 client.listen(PORT, function (){
     console.log('shadowsocks client start listen');
